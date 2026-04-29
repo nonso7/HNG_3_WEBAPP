@@ -38,7 +38,7 @@ seamlessly without cross-site headaches.
 `.env.local` (or Vercel env vars):
 
 ```
-BACKEND_URL=https://be-hng-1-production.up.railway.app
+BACKEND_URL=https://be-hng-1.onrender.com
 ```
 
 That's the only required variable — `next.config.js` reads it for the

@@ -20,4 +20,4 @@ jobs:
       - run: npm run typecheck
       - run: npm run build
         env:
-          BACKEND_URL: https://be-hng-1-production.up.railway.app
+          BACKEND_URL: https://be-hng-1.onrender.com
