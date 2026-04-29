@@ -18,11 +18,29 @@ export async function api<T = any>(
     if (csrf) headers['X-CSRF-Token'] = csrf;
     if (init.body && !headers['Content-Type']) headers['Content-Type'] = 'application/json';
   }
-  const res = await fetch(path, {
-    credentials: 'include',
-    ...init,
-    headers,
-  });
+
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 15_000);
+
+  let res: Response;
+  try {
+    res = await fetch(path, {
+      credentials: 'include',
+      signal: controller.signal,
+      ...init,
+      headers,
+    });
+  } catch (err: any) {
+    clearTimeout(timeout);
+    return {
+      ok: false,
+      status: 0,
+      data: null,
+      error: err?.name === 'AbortError' ? 'Request timed out' : 'Network error — backend unreachable',
+    };
+  }
+  clearTimeout(timeout);
+
   const contentType = res.headers.get('content-type') || '';
   let data: any = null;
   if (contentType.includes('application/json')) {
@@ -32,7 +50,11 @@ export async function api<T = any>(
       data = null;
     }
   } else {
-    data = await res.text();
+    try {
+      data = await res.text();
+    } catch {
+      data = null;
+    }
   }
   if (!res.ok) {
     return { ok: false, status: res.status, data: null, error: data?.message || `HTTP ${res.status}` };
