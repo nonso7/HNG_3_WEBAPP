@@ -31,7 +31,6 @@ export default function AccountPage() {
           <table>
             <tbody>
               <tr><th>Username</th><td>@{user.username}</td></tr>
-              <tr><th>ID</th><td>{user.id}</td></tr>
               <tr><th>Role</th><td>{user.role}</td></tr>
               <tr><th>Email</th><td>{user.email || '—'}</td></tr>
               <tr><th>Active</th><td>{user.is_active ? 'Yes' : 'No'}</td></tr>
