@@ -1,5 +1,5 @@
 'use client';
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import Nav from '../Nav';
@@ -18,6 +18,16 @@ export default function ProfilesPage() {
   const [order, setOrder] = useState('desc');
   const [createName, setCreateName] = useState('');
   const [createMsg, setCreateMsg] = useState('');
+  const [importFile, setImportFile] = useState<File | null>(null);
+  const [importing, setImporting] = useState(false);
+  const [importMsg, setImportMsg] = useState('');
+  const [importSummary, setImportSummary] = useState<{
+    total_rows: number;
+    inserted: number;
+    skipped: number;
+    reasons: Record<string, number>;
+  } | null>(null);
+  const importInputRef = useRef<HTMLInputElement | null>(null);
   const router = useRouter();
 
   useEffect(() => {
@@ -68,6 +78,59 @@ export default function ProfilesPage() {
     const r = await api(`/api/profiles/${id}`, { method: 'DELETE' });
     if (r.ok) load();
     else alert(r.error);
+  }
+
+  async function handleImport(e: React.FormEvent) {
+    e.preventDefault();
+    if (!importFile) return;
+    setImporting(true);
+    setImportMsg('Uploading…');
+    setImportSummary(null);
+
+    const fd = new FormData();
+    fd.append('file', importFile);
+
+    const csrf = document.cookie
+      .split(';')
+      .map(s => s.trim())
+      .find(s => s.startsWith('csrf_token='));
+    const csrfToken = csrf ? decodeURIComponent(csrf.slice('csrf_token='.length)) : '';
+
+    const headers: Record<string, string> = { 'X-API-Version': '1' };
+    if (csrfToken) headers['X-CSRF-Token'] = csrfToken;
+
+    let res: Response;
+    try {
+      res = await fetch('/api/profiles/import', {
+        method: 'POST',
+        credentials: 'include',
+        headers,
+        body: fd,
+      });
+    } catch {
+      setImporting(false);
+      setImportMsg('Network error — backend unreachable');
+      return;
+    }
+
+    let body: any = null;
+    try { body = await res.json(); } catch {}
+
+    setImporting(false);
+    if (!res.ok) {
+      setImportMsg(`Error: ${body?.message || `HTTP ${res.status}`}`);
+      return;
+    }
+    setImportSummary({
+      total_rows: body?.total_rows ?? 0,
+      inserted: body?.inserted ?? 0,
+      skipped: body?.skipped ?? 0,
+      reasons: body?.reasons ?? {},
+    });
+    setImportMsg(`Imported ${body?.inserted ?? 0} of ${body?.total_rows ?? 0} rows.`);
+    setImportFile(null);
+    if (importInputRef.current) importInputRef.current.value = '';
+    load();
   }
 
   async function exportCsv() {
@@ -145,6 +208,55 @@ export default function ProfilesPage() {
               <button type="submit" disabled={!createName}>Create</button>
             </form>
             {createMsg && <p className="muted">{createMsg}</p>}
+          </div>
+        )}
+
+        {user?.role === 'admin' && (
+          <div className="card">
+            <h3>Import CSV (admin)</h3>
+            <p className="muted" style={{ marginTop: 0 }}>
+              Required columns: <code>name, gender, age, country_id</code>.
+              Optional: <code>gender_probability, country_probability</code>.
+              Up to 500,000 rows per file.
+            </p>
+            <form onSubmit={handleImport} style={{ display: 'flex', gap: '0.5rem', alignItems: 'center', flexWrap: 'wrap' }}>
+              <input
+                id="import-file-input"
+                ref={importInputRef}
+                type="file"
+                accept=".csv,text/csv"
+                onChange={e => setImportFile(e.target.files?.[0] ?? null)}
+                disabled={importing}
+                required
+              />
+              <button type="submit" disabled={!importFile || importing}>
+                {importing ? 'Importing…' : 'Import'}
+              </button>
+            </form>
+            {importMsg && <p className="muted">{importMsg}</p>}
+            {importSummary && (
+              <div style={{ marginTop: '0.5rem' }}>
+                <table>
+                  <tbody>
+                    <tr><th>Total rows</th><td>{importSummary.total_rows.toLocaleString()}</td></tr>
+                    <tr><th>Inserted</th><td>{importSummary.inserted.toLocaleString()}</td></tr>
+                    <tr><th>Skipped</th><td>{importSummary.skipped.toLocaleString()}</td></tr>
+                  </tbody>
+                </table>
+                {Object.keys(importSummary.reasons).length > 0 && (
+                  <>
+                    <h4 style={{ marginBottom: '0.25rem' }}>Skip reasons</h4>
+                    <table>
+                      <tbody>
+                        {Object.entries(importSummary.reasons).map(([reason, count]) => (
+                          <tr key={reason}><th>{reason}</th><td>{count.toLocaleString()}</td></tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </>
+                )}
+              </div>
+            )}
           </div>
         )}
 
